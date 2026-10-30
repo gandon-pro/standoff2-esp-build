@@ -14,8 +14,8 @@ Implemented source path:
 - IL2CPP type registration confirms PlayerBindings (metadata type 15749)
   inherits UnityEngine.MonoBehaviour, so the Object search is type-compatible.
   Whether it finds every relevant player in a match remains untested.
-- Resolve CharacterController -> Component.transform -> Transform.position,
-  then use CharacterController.center and height for the capsule endpoints.
+- Resolve CharacterController -> Component.transform, then convert its local
+  center and height endpoints through Transform.TransformPoint.
 - Convert Unity Screen dimensions into overlay coordinates and draw rectangles.
 - Root the array and camera during iteration with GC handles, check invocation
   exceptions and reject invalid/behind-camera projections. Updates run on the
@@ -23,7 +23,8 @@ Implemented source path:
 
 `build.sh` was run in GitHub Actions run 40925862865, producing the older
 `out/S2ESP.dylib` (72,120 bytes). The source now uses capsule dimensions and
-has not been rebuilt since that change. `out/Standoff2-ESP-unsigned.ipa`
+TransformPoint and has not been rebuilt since that change.
+`out/Standoff2-ESP-unsigned.ipa`
 contains the older dylib and an executable load command for it. Archive CRC
 and payload presence were checked; GBox signing, installation, constructor
 execution and overlay display were not. A constructor registers an

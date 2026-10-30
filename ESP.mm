@@ -62,7 +62,7 @@ struct API {
 } api;
 struct Runtime {
  void* player=nullptr;
- const void *find=nullptr,*camera=nullptr,*controller=nullptr,*transform=nullptr,*position=nullptr,*project=nullptr,*width=nullptr,*height=nullptr;
+ const void *find=nullptr,*camera=nullptr,*controller=nullptr,*transform=nullptr,*transformPoint=nullptr,*project=nullptr,*width=nullptr,*height=nullptr;
  const void *capsuleHeight=nullptr,*capsuleCenter=nullptr;
  bool ready=false;
  bool initialize() {
@@ -82,9 +82,9 @@ struct Runtime {
   capsuleHeight=api.method(character,"get_height",0);
   capsuleCenter=api.method(character,"get_center",0);
   transform=api.method(component,"get_transform",0);
-  position=api.method(tr,"get_position",0);
+  transformPoint=api.method(tr,"TransformPoint",1);
   project=api.method(cam,"WorldToScreenPoint",1);
-  return ready=player&&find&&camera&&controller&&capsuleHeight&&capsuleCenter&&transform&&position&&project&&width&&height;
+  return ready=player&&find&&camera&&controller&&capsuleHeight&&capsuleCenter&&transform&&transformPoint&&project&&width&&height;
  }
  bool vector(const void* m,void* obj,void** args,V3& out) {
   bool ok;auto boxed=api.invoke(m,obj,args,ok);
@@ -150,12 +150,15 @@ struct Runtime {
   auto tr=api.invoke(runtime.transform,cc,nullptr,ok);if(!ok||!tr)continue;
   V3 foot,head,center,screenFoot,screenHead;
   float capsuleHeight;
-  if(!runtime.vector(runtime.position,tr,nullptr,foot)||
-     !runtime.vector(runtime.capsuleCenter,cc,nullptr,center)||
+  if(!runtime.vector(runtime.capsuleCenter,cc,nullptr,center)||
      !runtime.scalar(runtime.capsuleHeight,cc,capsuleHeight)||
      capsuleHeight<0.3f||capsuleHeight>3.5f)continue;
-  foot.x+=center.x;foot.y+=center.y-capsuleHeight*.5f;foot.z+=center.z;
-  head=foot;head.y+=capsuleHeight;
+  V3 localFoot=center,localHead=center;
+  localFoot.y-=capsuleHeight*.5f;
+  localHead.y+=capsuleHeight*.5f;
+  void* localFootArgs[]={&localFoot};void* localHeadArgs[]={&localHead};
+  if(!runtime.vector(runtime.transformPoint,tr,localFootArgs,foot)||
+     !runtime.vector(runtime.transformPoint,tr,localHeadArgs,head))continue;
   void* footArgs[]={&foot};void* headArgs[]={&head};
   cam=api.gchandle_get_target(cameraRoot);
   if(!runtime.vector(runtime.project,cam,footArgs,screenFoot)||
