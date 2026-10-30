@@ -20,6 +20,10 @@ Implemented source path:
 - Root the array and camera during iteration with GC handles, check invocation
   exceptions and reject invalid/behind-camera projections. Updates run on the
   main run loop at a requested 20 Hz and process at most 128 bindings.
+- Write a bounded local diagnostic log at `Documents/S2ESP-diagnostics.log`.
+  It records library/overlay startup, runtime status, and aggregate player
+  counts on state changes or every 15 seconds. It does not record account
+  identifiers, challenge payloads, tokens, or player names.
 
 `build.sh` was run in GitHub Actions run 40925862865, producing the older
 `out/S2ESP.dylib` (72,120 bytes). The source now uses capsule dimensions and
@@ -36,6 +40,8 @@ all-enemy coverage, main-camera correctness, camera viewport/orientation,
 self/team/dead-player filtering, actual character height, frame cost, app
 integrity compatibility and GBox signing/install behavior. There is no
 undetected or anti-ban claim.
+The dylib load command can itself be detected; this build must not be treated
+as safe for an account.
 
 No runtime player offsets are used by this source. The separate static marker
 analysis remains evidence for an alternate discovery path, not a validated

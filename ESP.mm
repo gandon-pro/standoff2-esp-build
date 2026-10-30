@@ -4,6 +4,21 @@
 #include <cmath>
 #include <cstring>
 #include <cstdint>
+#include <cstdio>
+#include <ctime>
+
+static void S2Log(const char* state, unsigned long found=0, unsigned long drawn=0) {
+ NSString* path=[NSHomeDirectory() stringByAppendingPathComponent:@"Documents/S2ESP-diagnostics.log"];
+ FILE* file=fopen(path.fileSystemRepresentation,"a+");
+ if(!file)return;
+ if(fseek(file,0,SEEK_END)==0 && ftell(file)>256*1024) {
+  fclose(file);
+  file=fopen(path.fileSystemRepresentation,"w");
+  if(!file)return;
+ }
+ fprintf(file,"%lld %s found=%lu drawn=%lu\n",(long long)time(nullptr),state,found,drawn);
+ fclose(file);
+}
 
 // Runtime prototype: requires device verification.
 namespace {
@@ -111,12 +126,25 @@ struct Runtime {
 @property(nonatomic,strong) CADisplayLink* link;
 @end
 @implementation S2ESP
+{
+ char _lastState[32];
+ CFTimeInterval _lastSummary;
+}
+- (void)report:(const char*)state found:(NSUInteger)found drawn:(NSUInteger)drawn {
+ CFTimeInterval now=CACurrentMediaTime();
+ if(strcmp(_lastState,state)!=0 || now-_lastSummary>=15) {
+  S2Log(state,(unsigned long)found,(unsigned long)drawn);
+  snprintf(_lastState,sizeof(_lastState),"%s",state);
+  _lastSummary=now;
+ }
+}
 - (void)didMoveToWindow {
  [super didMoveToWindow];
  self.link.paused=self.window==nil;
 }
 - (instancetype)initWithFrame:(CGRect)frame {
  if((self=[super initWithFrame:frame])) {
+  _lastState[0]=0;
   self.userInteractionEnabled=NO;self.backgroundColor=UIColor.clearColor;
   _boxes=[CAShapeLayer layer];_boxes.strokeColor=UIColor.greenColor.CGColor;
   _boxes.fillColor=UIColor.clearColor.CGColor;_boxes.lineWidth=1.5;
@@ -129,20 +157,23 @@ struct Runtime {
 }
 - (void)updateESP {
  self.boxes.path=nil;
- if(!runtime.ready&&!runtime.initialize())return;
+ if(!runtime.ready&&!runtime.initialize()){
+  [self report:"runtime_unavailable" found:0 drawn:0];return;
+ }
  bool ok=false;void* cam=api.invoke(runtime.camera,nullptr,nullptr,ok);
- if(!ok||!cam)return;
+ if(!ok||!cam){[self report:"camera_unavailable" found:0 drawn:0];return;}
  uint32_t cameraRoot=api.gchandle_new(cam,false);
  void* type=api.type_get_object(api.class_get_type(runtime.player));
  void* args[]={type};
  void* objects=api.invoke(runtime.find,nullptr,args,ok);
- if(!ok||!objects){api.gchandle_free(cameraRoot);return;}
+ if(!ok||!objects){api.gchandle_free(cameraRoot);[self report:"player_query_failed" found:0 drawn:0];return;}
  uint32_t arrayRoot=api.gchandle_new(objects,false);
  auto count=api.array_length(objects);
  int renderWidth=runtime.dimension(runtime.width),renderHeight=runtime.dimension(runtime.height);
- if(renderWidth<=0||renderHeight<=0){api.gchandle_free(arrayRoot);api.gchandle_free(cameraRoot);return;}
+ if(renderWidth<=0||renderHeight<=0){api.gchandle_free(arrayRoot);api.gchandle_free(cameraRoot);[self report:"screen_unavailable" found:count drawn:0];return;}
  CGFloat sx=self.bounds.size.width/renderWidth,sy=self.bounds.size.height/renderHeight;
  UIBezierPath* path=[UIBezierPath bezierPath];
+ NSUInteger drawn=0;
  for(uintptr_t i=0;i<count&&i<128;i++) {
   objects=api.gchandle_get_target(arrayRoot);
   void* player=((void**)((char*)objects+api.array_object_header_size()))[i];
@@ -167,9 +198,11 @@ struct Runtime {
   if(h<2||h>self.bounds.size.height*2)continue;
   CGFloat x=screenHead.x*sx,y=self.bounds.size.height-screenHead.y*sy;
   [path appendPath:[UIBezierPath bezierPathWithRect:CGRectMake(x-h*.25,y,h*.5,h)]];
+  ++drawn;
  }
  api.gchandle_free(arrayRoot);api.gchandle_free(cameraRoot);
  self.boxes.path=path.CGPath;
+ [self report:(drawn?"drawing":"no_visible_targets") found:count drawn:drawn];
 }
 @end
 
@@ -181,6 +214,7 @@ extern "C" __attribute__((visibility("default"))) void S2ESPInstall(UIWindow* wi
   S2ESP* view=[[S2ESP alloc] initWithFrame:window.bounds];
   view.autoresizingMask=UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;
   [window addSubview:view];
+  S2Log("overlay_installed");
  });
 }
 
@@ -198,6 +232,7 @@ static void InstallInActiveScene() {
 }
 
 __attribute__((constructor)) static void S2ESPStart() {
+ S2Log("library_loaded");
  dispatch_async(dispatch_get_main_queue(),^{
   [NSNotificationCenter.defaultCenter addObserverForName:UIApplicationDidBecomeActiveNotification
    object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification* notification) {
