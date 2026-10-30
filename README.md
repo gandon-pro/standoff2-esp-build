@@ -1,5 +1,13 @@
 # ESP runtime implementation status
 
+`launcher.mm` rebuilds the small Unity startup executable and links `ESP.mm`
+into that executable. This removes the separate ESP dylib dependency from the
+static package. `package_static_ipa.py` installs the launcher in a copy of the
+supplied app and exposes the diagnostics log through Files. The native
+UnityFramework still loads as the game's existing framework. The static
+launcher has not yet been tested on an iPhone; it is not an Integrity or
+Warden bypass.
+
 ESP.mm is a runtime prototype for the supplied app. A compiled ARM64 iOS dylib
 and an unsigned IPA are in `out/`. Neither has been installed or tested in
 Standoff 2. No anti-cheat changes are included.

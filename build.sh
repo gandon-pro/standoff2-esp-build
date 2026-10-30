@@ -8,3 +8,9 @@ xcrun --sdk iphoneos clang++ -std=c++17 -fobjc-arc -dynamiclib \
   -framework UIKit -framework QuartzCore -O2 \
   -install_name @rpath/S2ESP.dylib ESP.mm -o out/S2ESP.dylib
 xcrun --sdk iphoneos otool -hv out/S2ESP.dylib
+xcrun --sdk iphoneos clang++ -std=c++17 -fobjc-arc \
+  -target arm64-apple-ios15.0 -isysroot "$sdk" \
+  -framework UIKit -framework QuartzCore -framework Foundation -O2 \
+  -Wl,-rpath,@executable_path/Frameworks \
+  launcher.mm ESP.mm -o out/Standoff2-static
+xcrun --sdk iphoneos otool -hv out/Standoff2-static
