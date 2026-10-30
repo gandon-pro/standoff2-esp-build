@@ -5,7 +5,7 @@
 #include <cstring>
 #include <cstdint>
 
-// Runtime prototype: requires device verification and integration into the app.
+// Runtime prototype: requires device verification.
 namespace {
 struct V3 { float x,y,z; };
 struct API {
@@ -63,6 +63,7 @@ struct API {
 struct Runtime {
  void* player=nullptr;
  const void *find=nullptr,*camera=nullptr,*controller=nullptr,*transform=nullptr,*position=nullptr,*project=nullptr,*width=nullptr,*height=nullptr;
+ const void *capsuleHeight=nullptr,*capsuleCenter=nullptr;
  bool ready=false;
  bool initialize() {
   if(!api.load())return false;
@@ -70,6 +71,7 @@ struct Runtime {
   auto object=api.cls("UnityEngine.CoreModule.dll","UnityEngine","Object");
   auto cam=api.cls("UnityEngine.CoreModule.dll","UnityEngine","Camera");
   auto component=api.cls("UnityEngine.CoreModule.dll","UnityEngine","Component");
+  auto character=api.cls("UnityEngine.PhysicsModule.dll","UnityEngine","CharacterController");
   auto tr=api.cls("UnityEngine.CoreModule.dll","UnityEngine","Transform");
   auto type=api.cls("mscorlib.dll","System","Type");
   auto screen=api.cls("UnityEngine.CoreModule.dll","UnityEngine","Screen");
@@ -77,10 +79,12 @@ struct Runtime {
   find=api.method(object,"FindObjectsOfType",1,type);
   camera=api.method(cam,"get_main",0);
   controller=api.method(player,"get_CharacterController",0);
+  capsuleHeight=api.method(character,"get_height",0);
+  capsuleCenter=api.method(character,"get_center",0);
   transform=api.method(component,"get_transform",0);
   position=api.method(tr,"get_position",0);
   project=api.method(cam,"WorldToScreenPoint",1);
-  return ready=player&&find&&camera&&controller&&transform&&position&&project&&width&&height;
+  return ready=player&&find&&camera&&controller&&capsuleHeight&&capsuleCenter&&transform&&position&&project&&width&&height;
  }
  bool vector(const void* m,void* obj,void** args,V3& out) {
   bool ok;auto boxed=api.invoke(m,obj,args,ok);
@@ -92,6 +96,12 @@ struct Runtime {
   bool ok;void* boxed=api.invoke(method,nullptr,nullptr,ok);
   if(!ok||!boxed)return 0;
   int value;memcpy(&value,api.object_unbox(boxed),sizeof(value));return value;
+ }
+ bool scalar(const void* method,void* object,float& out) {
+  bool ok;void* boxed=api.invoke(method,object,nullptr,ok);
+  if(!ok||!boxed)return false;
+  memcpy(&out,api.object_unbox(boxed),sizeof(out));
+  return std::isfinite(out);
  }
 } runtime;
 }
@@ -138,9 +148,14 @@ struct Runtime {
   void* player=((void**)((char*)objects+api.array_object_header_size()))[i];
   auto cc=api.invoke(runtime.controller,player,nullptr,ok);if(!ok||!cc)continue;
   auto tr=api.invoke(runtime.transform,cc,nullptr,ok);if(!ok||!tr)continue;
-  V3 foot,head,screenFoot,screenHead;
-  if(!runtime.vector(runtime.position,tr,nullptr,foot))continue;
-  head=foot;head.y+=1.7f;
+  V3 foot,head,center,screenFoot,screenHead;
+  float capsuleHeight;
+  if(!runtime.vector(runtime.position,tr,nullptr,foot)||
+     !runtime.vector(runtime.capsuleCenter,cc,nullptr,center)||
+     !runtime.scalar(runtime.capsuleHeight,cc,capsuleHeight)||
+     capsuleHeight<0.3f||capsuleHeight>3.5f)continue;
+  foot.x+=center.x;foot.y+=center.y-capsuleHeight*.5f;foot.z+=center.z;
+  head=foot;head.y+=capsuleHeight;
   void* footArgs[]={&foot};void* headArgs[]={&head};
   cam=api.gchandle_get_target(cameraRoot);
   if(!runtime.vector(runtime.project,cam,footArgs,screenFoot)||
